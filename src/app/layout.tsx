@@ -1,15 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Mono, Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
+import Image from "next/image";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+
+const spaceMono = Space_Mono({
+  weight: ['400', '700'],
+  variable: "--font-space-mono",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const barlow = Barlow({
+  weight: ['100','200','300','400','500','600', '700','800','900'],
+  variable: "--font-barlow"
+});
+
+const barlowCondensed = Barlow_Condensed({
+  weight: ['100','200','300','400','500','600', '700','800','900'],
+  variable: "--font-barlow-condensed",
 });
 
 export const metadata: Metadata = {
@@ -25,9 +32,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${spaceMono.variable} ${barlow.variable} ${barlowCondensed.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full w-full">
+          <div className="flex flex-col flex-1 items-center justify-center font-barlow ">
+              {children}
+          </div>
+      </body>
     </html>
   );
 }

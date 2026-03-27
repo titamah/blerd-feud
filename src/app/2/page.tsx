@@ -46,28 +46,37 @@ export default function SurveyRound() {
     setScore((prev) => prev + points);
   };
 
-useEffect(() => {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.code === "KeyX") {
-      triggerBuzzer("POW!");
-      setLives((prevLives) => prevLives - 1);
-    }
-  };
+  const [currentTeam, setCurrentTeam] = useState("Team A");
 
-  window.addEventListener("keydown", handleKeyDown);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "KeyX") {
+        triggerBuzzer("POW!");
+        setLives((prevLives) => prevLives - 1);
+      }
+    };
 
-  return () => {
-    window.removeEventListener("keydown", handleKeyDown);
-  };
-}, []);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+  if (lives === 0) {
+    setCurrentTeam("Team B");
+  } else if (lives === -1) {
+    setCurrentTeam("Team A");
+  }
+}, [lives]);
 
   return (
     <div className="fixed top-0 flex flex-col flex-1 gap-4 items-center justify-center font-barlow h-full w-full dotted">
       <div className="w-[85%] max-w-[1048px] flex flew-row align-center items-center">
-        
         <div className="w-[33%] h-fit pt-2 relative flex flex-row justify-around">
           <div className="w-full font-barlow-condensed justify-start font-[700] text-4xl text-black p-2 px-4">
-            {"Playing Now: Team A".toUpperCase()}
+            {`Playing Now: ${currentTeam}`.toUpperCase()}
           </div>
         </div>
 

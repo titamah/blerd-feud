@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Mono, Barlow, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
-import Image from "next/image";
+import { GameProvider } from "@/context/GameContext";
 
 
 const spaceMono = Space_Mono({
@@ -35,9 +35,9 @@ export default function RootLayout({
       className={`${spaceMono.variable} ${barlow.variable} ${barlowCondensed.variable} h-full antialiased`}
     >
       <body className="min-h-full w-full">
-          <div className="flex flex-col flex-1 items-center justify-center font-barlow ">
+        <GameProvider>
               {children}
-          </div>
+          </GameProvider>
       </body>
     </html>
   );

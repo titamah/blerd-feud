@@ -15,6 +15,16 @@ export default function EndRoundOverlay() {
           ROUND OVER!
         </div>
 
+        {!allRevealed ? (
+        <div className="flex flex-row gap-8 w-full justify-around">
+          <div className="flex flex-col items-center">
+            <div className="font-barlow-condensed font-[700] text-white text-2xl">Total Points Earned</div>
+            <div className="font-space-mono font-[700] text-white text-5xl mt-1">
+              {state.roundPoints.toString().padStart(3, "0")}
+            </div>
+          </div>
+        </div>
+        ) : (
         <div className="flex flex-row gap-8 w-full justify-around">
           <div className="flex flex-col items-center">
             <div className="font-barlow-condensed font-[700] text-white text-2xl">TEAM A</div>
@@ -29,6 +39,7 @@ export default function EndRoundOverlay() {
             </div>
           </div>
         </div>
+        )}
 
         {!allRevealed ? (
           <button

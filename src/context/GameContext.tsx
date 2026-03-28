@@ -12,6 +12,7 @@ import questions, { Question } from "@/data/questions";
 
 export type Screen =
   | "start"
+  | "rules"
   | "question"
   | "face_off"
   | "play_or_pass"
@@ -52,6 +53,7 @@ export type GameState = {
 
 export type GameAction =
   | { type: "START_GAME" }
+  | { type: "START_QUESTIONS" }
   | { type: "SHOW_BOARD" }
   // Face-off
   | { type: "FACE_OFF_BUZZ"; payload: Team }
@@ -113,7 +115,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
 
     case "START_GAME":
-      return { ...initialState, screen: "question" };
+      return { ...initialState, screen: "rules" };
+
+    case "START_QUESTIONS":
+      return { ...state, screen: "question" };
 
     case "SHOW_BOARD":
       return {

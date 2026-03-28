@@ -12,7 +12,9 @@ import NextRoundOverlay from "@/components/NextRoundOverlay";
 import EnterToContinue from "@/components/EnterToContinue";
 import { useGame } from "@/context/GameContext";
 
-interface Toast { id: number }
+interface Toast {
+  id: number;
+}
 
 export default function BoardScreen() {
   const { state, dispatch } = useGame();
@@ -26,7 +28,9 @@ export default function BoardScreen() {
   // Track which "end_round phase" we're in:
   // "scores"   → show EndRoundOverlay (points earned / reveal button)
   // "revealed" → show NextRoundOverlay (after all answers revealed)
-  const [endRoundPhase, setEndRoundPhase] = useState<"scores" | "revealed">("scores");
+  const [endRoundPhase, setEndRoundPhase] = useState<"scores" | "revealed">(
+    "scores",
+  );
 
   const isSteal = state.screen === "steal";
   const isEndRound = state.screen === "end_round";
@@ -66,8 +70,14 @@ export default function BoardScreen() {
 
   const triggerBuzzer = () => {
     const id = Date.now();
+    const audio = new Audio('/wrong.mp3');
+    audio.play().catch((e) => console.error("Audio play failed:", e));
+
     setToasts((prev) => [...prev, { id }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 1000);
+    setTimeout(
+      () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+      1000,
+    );
   };
 
   useEffect(() => {
@@ -84,23 +94,31 @@ export default function BoardScreen() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [state.screen, stealReady, dispatch]);
 
-  const playingLabel =
-    isSteal
-      ? `STEALING: ${state.stealTeam === "teamA" ? "TEAM A" : "TEAM B"}`
-      : isRevealing
+  const playingLabel = isSteal
+    ? `STEALING: ${state.stealTeam === "teamA" ? "TEAM A" : "TEAM B"}`
+    : isRevealing
       ? ""
       : `PLAYING: ${state.turn === "teamA" ? "TEAM A" : "TEAM B"}`;
 
   // ── What Enter-gate caption is currently needed? ──────────────────────────
-  const showStealGate    = isSteal && !stealReady;
+  const showStealGate = isSteal && !stealReady;
   const showEndRoundGate = isEndRound && !endRoundReady;
   const showRevealedGate = isRevealing && allRevealed && !nextRoundReady;
-  const showAnyGate      = showStealGate || showEndRoundGate || showRevealedGate;
+  const showAnyGate = showStealGate || showEndRoundGate || showRevealedGate;
 
   const handleEnter = () => {
-    if (showStealGate)    { setStealReady(true);    return; }
-    if (showEndRoundGate) { setEndRoundReady(true);  return; }
-    if (showRevealedGate) { setNextRoundReady(true); return; }
+    if (showStealGate) {
+      setStealReady(true);
+      return;
+    }
+    if (showEndRoundGate) {
+      setEndRoundReady(true);
+      return;
+    }
+    if (showRevealedGate) {
+      setNextRoundReady(true);
+      return;
+    }
   };
 
   return (
@@ -127,7 +145,9 @@ export default function BoardScreen() {
       {/* Buzz toasts */}
       <div className="fixed inset-0 pointer-events-none z-[500000] flex items-center justify-center">
         <AnimatePresence>
-          {toasts.map((toast) => <BuzzToast key={toast.id} />)}
+          {toasts.map((toast) => (
+            <BuzzToast key={toast.id} />
+          ))}
         </AnimatePresence>
       </div>
 
@@ -137,11 +157,11 @@ export default function BoardScreen() {
       {/* Modals — only shown after their gate is cleared */}
       {isSteal && stealReady && <StealOverlay />}
       {isEndRound && endRoundReady && (
-        <EndRoundOverlay onReveal={() => dispatch({ type: "START_REVEALING" })} />
+        <EndRoundOverlay
+          onReveal={() => dispatch({ type: "START_REVEALING" })}
+        />
       )}
-      {isRevealing && allRevealed && nextRoundReady && (
-        <NextRoundOverlay />
-      )}
+      {isRevealing && allRevealed && nextRoundReady && <NextRoundOverlay />}
     </div>
   );
 }

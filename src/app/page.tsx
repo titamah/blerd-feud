@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
 import { useGame } from "@/context/GameContext";
 import QuestionScreen from "@/components/QuestionScreen";
+import RulesScreen from "@/components/RulesScreen";
 import FaceOffScreen from "@/components/FaceOffScreen";
 import PlayOrPassOverlay from "@/components/PlayOrPassOverlay";
 import BoardScreen from "@/components/BoardScreen";
@@ -12,6 +13,7 @@ import EndScreen from "@/components/EndScreen";
 export default function Home() {
   const { state, dispatch } = useGame();
 
+  if (state.screen === "rules") return <RulesScreen />;
   if (state.screen === "question") return <QuestionScreen />;
 
   if (state.screen === "face_off" || state.screen === "play_or_pass") {

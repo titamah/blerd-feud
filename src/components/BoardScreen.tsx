@@ -27,11 +27,16 @@ export default function BoardScreen() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "KeyX" && state.screen === "board") {
+      if (e.code === "KeyX" && state.screen === "board"){
         triggerBuzzer();
         dispatch({ type: "ADD_STRIKE" });
+      } else if (e.code === "KeyX" && state.screen === "steal") {
+        triggerBuzzer();
+        dispatch({ type: "STEAL_FAIL" });
       }
     };
+
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [state.screen, dispatch]);

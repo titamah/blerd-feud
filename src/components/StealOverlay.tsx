@@ -24,26 +24,12 @@ export default function StealOverlay() {
           {stealLabel}
         </div>
 
-        <p className="font-space-mono text-white text-center text-base opacity-90">
-          One answer. Make it count.
-          <br />
-          <span className="opacity-70 text-sm">
-            Press a number key or click an answer on the board.
-          </span>
-        </p>
-
-        <div className="flex flex-col gap-3 w-full">
+        <div className="flex flex-col gap-3 w-full items-center">
           <button
             onClick={() => setDismissed(true)}
-            className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-lg bg-white text-black border-[4px] border-black px-6 py-3 w-full text-center"
+            className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-lg bg-black text-white px-6 py-3 w-fit text-center"
           >
-            PICK AN ANSWER → (close &amp; use the board)
-          </button>
-          <button
-            onClick={() => dispatch({ type: "STEAL_FAIL" })}
-            className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-lg bg-black text-white px-6 py-3 w-full text-center"
-          >
-            WRONG ANSWER → pass points to playing team
+            PICK AN ANSWER →
           </button>
         </div>
       </div>

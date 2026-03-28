@@ -17,6 +17,7 @@ export type Screen =
   | "play_or_pass"
   | "board"
   | "steal"
+  | "revealing"
   | "end_round"
   | "end";
 
@@ -24,16 +25,13 @@ export type Team = "teamA" | "teamB";
 
 export type FaceOffAnswer = {
   team: Team;
-  answerIndex: number | null; // null = wrong (not on board)
-  points: number;             // 0 if wrong
+  answerIndex: number | null;
+  points: number;
 };
 
 export type FaceOffState = {
-  // Which team has the buzzer right now (waiting to answer)
   activeBuzzer: Team | null;
-  // Answers submitted so far (max 2, one per team)
   answers: FaceOffAnswer[];
-  // Which team won the face-off (gets Play or Pass)
   winner: Team | null;
 };
 
@@ -47,6 +45,7 @@ export type GameState = {
   roundPoints: number;
   stealing: boolean;
   stealTeam: Team | null;
+  scoreWinner: Team | null; // who gets roundPoints at end of round
   faceOff: FaceOffState;
   questions: Question[];
 };
@@ -63,12 +62,13 @@ export type GameAction =
   | { type: "PASS" }
   // Board
   | { type: "REVEAL_ANSWER"; payload: { index: number; points: number } }
-  | { type: "REVEAL_ALL" }
+  | { type: "REVEAL_ANSWER_DISPLAY"; payload: { index: number } }
   | { type: "ADD_STRIKE" }
   // Steal
   | { type: "STEAL_SUCCESS"; payload: { index: number; points: number } }
   | { type: "STEAL_FAIL" }
   // Navigation
+  | { type: "START_REVEALING" }
   | { type: "NEXT_QUESTION" }
   | { type: "RESET_GAME" };
 
@@ -102,6 +102,7 @@ const initialState: GameState = {
   roundPoints: 0,
   stealing: false,
   stealTeam: null,
+  scoreWinner: null,
   faceOff: initialFaceOff,
   questions,
 };
@@ -123,6 +124,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         revealed: [],
         stealing: false,
         stealTeam: null,
+        scoreWinner: null,
         faceOff: initialFaceOff,
       };
 
@@ -131,19 +133,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "FACE_OFF_BUZZ": {
       const { faceOff } = state;
       const team = action.payload;
-
-      // Ignore if this team already answered, or if there's already an active buzzer
       if (faceOff.activeBuzzer !== null) return state;
       if (faceOff.answers.some((a) => a.team === team)) return state;
-
-      return {
-        ...state,
-        faceOff: { ...faceOff, activeBuzzer: team },
-      };
+      return { ...state, faceOff: { ...faceOff, activeBuzzer: team } };
     }
 
     case "FACE_OFF_ANSWER_CORRECT": {
-      // Active buzzer got an answer on the board — reveal it
       const { faceOff } = state;
       const team = faceOff.activeBuzzer;
       if (!team) return state;
@@ -169,10 +164,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
-      // Both teams have now answered — determine winner
       if (newAnswers.length === 2) {
         const [first, second] = newAnswers;
-        // Higher points wins; tie goes to first buzzer
         const winner = second.points > first.points ? second.team : first.team;
         return {
           ...state,
@@ -184,7 +177,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
-      // Only one team answered correctly — other team gets to buzz
       return {
         ...state,
         revealed: newRevealed,
@@ -194,7 +186,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "FACE_OFF_ANSWER_WRONG": {
-      // Active buzzer's answer was NOT on the board
       const { faceOff } = state;
       const team = faceOff.activeBuzzer;
       if (!team) return state;
@@ -202,7 +193,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const newAnswer: FaceOffAnswer = { team, answerIndex: null, points: 0 };
       const newAnswers = [...faceOff.answers, newAnswer];
 
-      // Both teams answered and both were wrong → first buzzer wins
       if (newAnswers.length === 2) {
         const winner = newAnswers[0].team;
         return {
@@ -213,7 +203,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         };
       }
 
-      // One team answered wrong — other team gets to buzz
       return {
         ...state,
         faceOff: { ...faceOff, activeBuzzer: null, answers: newAnswers, winner: null },
@@ -223,15 +212,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     // ── Play or Pass ──────────────────────────────────────────────────────────
 
     case "PLAY":
-      // Winner plays — opponent gets steal rights
-      return {
-        ...state,
-        screen: "board",
-        stealTeam: opposite(state.turn),
-      };
+      return { ...state, screen: "board", stealTeam: opposite(state.turn) };
 
     case "PASS":
-      // Winner passes — opponent plays, winner retains steal rights
       return {
         ...state,
         screen: "board",
@@ -251,27 +234,25 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         revealed: newRevealed,
         roundPoints: newRoundPoints,
+        // Board swept: skip end_round, go straight to revealing. Score committed later.
         ...(swept && {
-          screen: "end_round" as Screen,
-          scores: {
-            ...state.scores,
-            [state.turn]: state.scores[state.turn] + newRoundPoints,
-          },
+          screen: "revealing" as Screen,
+          scoreWinner: state.turn,
         }),
       };
     }
 
-    case "REVEAL_ALL": {
-      const total = state.questions[state.questionIndex].answers.length;
-      return {
-        ...state,
-        revealed: Array.from({ length: total }, (_, i) => i),
-      };
+    // Reveal tile visually only — no score impact, used during "revealing" phase
+    case "REVEAL_ANSWER_DISPLAY": {
+      const { index } = action.payload;
+      if (state.revealed.includes(index)) return state;
+      return { ...state, revealed: [...state.revealed, index] };
     }
 
     case "ADD_STRIKE": {
       const newStrikes = state.strikes + 1;
       if (newStrikes >= 3) {
+        // Goes to "steal" screen — BoardScreen Enter-gates the StealOverlay
         return { ...state, strikes: newStrikes, screen: "steal", stealing: true };
       }
       return { ...state, strikes: newStrikes };
@@ -283,39 +264,49 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const newRevealed = [...state.revealed, action.payload.index];
       const newRoundPoints = state.roundPoints + action.payload.points;
       const winner = state.stealTeam ?? opposite(state.turn);
+      const total = state.questions[state.questionIndex].answers.length;
+      const boardCleared = newRevealed.length >= total;
       return {
         ...state,
-        screen: "end_round",
+        screen: boardCleared ? "revealing" : "end_round",
         revealed: newRevealed,
         roundPoints: newRoundPoints,
         stealing: false,
-        scores: {
-          ...state.scores,
-          [winner]: state.scores[winner] + newRoundPoints,
-        },
+        scoreWinner: winner,
       };
     }
 
-    case "STEAL_FAIL":
+    case "STEAL_FAIL": {
+      const total = state.questions[state.questionIndex].answers.length;
+      const boardCleared = state.revealed.length >= total;
       return {
         ...state,
-        screen: "end_round",
+        screen: boardCleared ? "revealing" : "end_round",
         stealing: false,
-        scores: {
-          ...state.scores,
-          [state.turn]: state.scores[state.turn] + state.roundPoints,
-        },
+        scoreWinner: state.turn,
       };
+    }
+
+    // ── Revealing ─────────────────────────────────────────────────────────────
+
+    case "START_REVEALING":
+      return { ...state, screen: "revealing" };
 
     // ── Round / Game end ──────────────────────────────────────────────────────
 
     case "NEXT_QUESTION": {
       const nextIndex = state.questionIndex + 1;
+      const winner = state.scoreWinner;
+      const newScores = winner
+        ? { ...state.scores, [winner]: state.scores[winner] + state.roundPoints }
+        : state.scores;
+
       if (nextIndex >= state.questions.length) {
-        return { ...state, screen: "end" };
+        return { ...state, scores: newScores, screen: "end" };
       }
       return {
         ...state,
+        scores: newScores,
         screen: "question",
         questionIndex: nextIndex,
         revealed: [],
@@ -323,6 +314,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         roundPoints: 0,
         stealing: false,
         stealTeam: null,
+        scoreWinner: null,
         faceOff: initialFaceOff,
         turn: opposite(state.turn),
       };

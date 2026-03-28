@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useGame } from "@/context/GameContext";
 
-type BoardMode = "face_off" | "board" | "steal" | "locked";
+type BoardMode = "face_off" | "board" | "steal" | "revealing" | "locked";
 
 type Props = {
   mode?: BoardMode;
@@ -12,20 +12,21 @@ type Props = {
 export default function SurveyBoard({ mode }: Props) {
   const { state, currentQuestion, dispatch } = useGame();
 
-  // Infer mode from game state if not explicitly passed
   const resolvedMode: BoardMode = mode ?? (() => {
     if (state.screen === "face_off") return "face_off";
     if (state.screen === "steal") return "steal";
     if (state.screen === "board") return "board";
+    if (state.screen === "revealing") return "revealing";
     return "locked";
   })();
 
   const isFaceOff = resolvedMode === "face_off";
   const isBoard = resolvedMode === "board";
   const isSteal = resolvedMode === "steal";
+  const isRevealing = resolvedMode === "revealing";
   const canInteract = isFaceOff || isBoard || isSteal;
 
-  // Keyboard 1–8: reveal answer
+  // Keyboard 1–8: reveal answer (not active during revealing — use clicks instead)
   useEffect(() => {
     if (!canInteract) return;
 
@@ -39,12 +40,8 @@ export default function SurveyBoard({ mode }: Props) {
       if (state.revealed.includes(index)) return;
 
       if (isFaceOff) {
-        // Only allow reveal if a team has the active buzzer
         if (!state.faceOff.activeBuzzer) return;
-        dispatch({
-          type: "FACE_OFF_ANSWER_CORRECT",
-          payload: { index, points: answer.points },
-        });
+        dispatch({ type: "FACE_OFF_ANSWER_CORRECT", payload: { index, points: answer.points } });
       } else if (isSteal) {
         dispatch({ type: "STEAL_SUCCESS", payload: { index, points: answer.points } });
       } else {
@@ -94,28 +91,28 @@ function SurveyAnswer({ answer, rank, answerIndex, isRevealed, mode }: AnswerPro
   const isFaceOff = mode === "face_off";
   const isSteal = mode === "steal";
   const isBoard = mode === "board";
+  const isRevealing = mode === "revealing";
 
-  // Face-off: clickable only when a team has the buzzer and answer isn't revealed
   const faceOffClickable = isFaceOff && !isRevealed && !!state.faceOff?.activeBuzzer && answer !== null;
-  // Board: always clickable if not revealed
-  const boardClickable = isBoard && !isRevealed && answer !== null;
-  // Steal: always clickable if not revealed
-  const stealClickable = isSteal && !isRevealed && answer !== null;
+  const boardClickable   = isBoard && !isRevealed && answer !== null;
+  const stealClickable   = isSteal && !isRevealed && answer !== null;
+  // During revealing: unrevealed tiles are clickable but only flip visually
+  const revealingClickable = isRevealing && !isRevealed && answer !== null;
 
-  const canClick = faceOffClickable || boardClickable || stealClickable;
+  const canClick = faceOffClickable || boardClickable || stealClickable || revealingClickable;
 
   const handleClick = () => {
-    if (!canClick || !answer) return;
+    if (!answer) return;
 
-    if (isFaceOff) {
-      dispatch({
-        type: "FACE_OFF_ANSWER_CORRECT",
-        payload: { index: answerIndex, points: answer.points },
-      });
-    } else if (isSteal) {
+    if (isFaceOff && faceOffClickable) {
+      dispatch({ type: "FACE_OFF_ANSWER_CORRECT", payload: { index: answerIndex, points: answer.points } });
+    } else if (isSteal && stealClickable) {
       dispatch({ type: "STEAL_SUCCESS", payload: { index: answerIndex, points: answer.points } });
-    } else {
+    } else if (isBoard && boardClickable) {
       dispatch({ type: "REVEAL_ANSWER", payload: { index: answerIndex, points: answer.points } });
+    } else if (isRevealing && revealingClickable) {
+      // Display-only reveal — no points added
+      dispatch({ type: "REVEAL_ANSWER_DISPLAY", payload: { index: answerIndex } });
     }
   };
 
@@ -140,7 +137,7 @@ function SurveyAnswer({ answer, rank, answerIndex, isRevealed, mode }: AnswerPro
     );
   }
 
-  // Hidden — dim it during face-off when no one has the buzzer
+  // Hidden — dim during face-off when nobody has the buzzer
   const dimmed = isFaceOff && !state.faceOff?.activeBuzzer;
 
   return (

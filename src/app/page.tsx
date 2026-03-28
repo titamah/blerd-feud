@@ -26,6 +26,7 @@ export default function Home() {
   if (
     state.screen === "board" ||
     state.screen === "steal" ||
+    state.screen === "revealing" ||
     state.screen === "end_round"
   ) return <BoardScreen />;
 

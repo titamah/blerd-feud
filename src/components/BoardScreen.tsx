@@ -8,6 +8,8 @@ import Lives from "@/components/Lives";
 import BuzzToast from "@/components/BuzzToast";
 import StealOverlay from "@/components/StealOverlay";
 import EndRoundOverlay from "@/components/EndRoundOverlay";
+import NextRoundOverlay from "@/components/NextRoundOverlay";
+import EnterToContinue from "@/components/EnterToContinue";
 import { useGame } from "@/context/GameContext";
 
 interface Toast { id: number }
@@ -16,8 +18,51 @@ export default function BoardScreen() {
   const { state, dispatch } = useGame();
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const isEndRound = state.screen === "end_round";
+  // Enter-gate local state for each modal
+  const [stealReady, setStealReady] = useState(false);
+  const [endRoundReady, setEndRoundReady] = useState(false);
+  const [nextRoundReady, setNextRoundReady] = useState(false);
+
+  // Track which "end_round phase" we're in:
+  // "scores"   → show EndRoundOverlay (points earned / reveal button)
+  // "revealed" → show NextRoundOverlay (after all answers revealed)
+  const [endRoundPhase, setEndRoundPhase] = useState<"scores" | "revealed">("scores");
+
   const isSteal = state.screen === "steal";
+  const isEndRound = state.screen === "end_round";
+  const isRevealing = state.screen === "revealing";
+
+  const { currentQuestion } = useGame();
+  const totalAnswers = currentQuestion?.answers.length ?? 0;
+  const allRevealed = state.revealed.length >= totalAnswers;
+
+  // Reset gate flags when screen changes so they're fresh each round
+  useEffect(() => {
+    if (isSteal) {
+      setStealReady(false);
+    }
+  }, [isSteal]);
+
+  useEffect(() => {
+    if (isEndRound) {
+      setEndRoundReady(false);
+      setEndRoundPhase("scores");
+    }
+  }, [isEndRound]);
+
+  // Entering "revealing": if board already fully revealed (swept), skip straight
+  // to the next-round gate. Otherwise wait for host to flip remaining tiles.
+  useEffect(() => {
+    if (isRevealing) {
+      if (allRevealed) {
+        // Swept board — go straight to next-round gate
+        setNextRoundReady(false);
+        setEndRoundPhase("revealed");
+      } else {
+        setEndRoundPhase("scores");
+      }
+    }
+  }, [isRevealing, allRevealed]);
 
   const triggerBuzzer = () => {
     const id = Date.now();
@@ -27,23 +72,36 @@ export default function BoardScreen() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "KeyX" && state.screen === "board"){
+      if (e.code === "KeyX" && state.screen === "board") {
         triggerBuzzer();
         dispatch({ type: "ADD_STRIKE" });
-      } else if (e.code === "KeyX" && state.screen === "steal") {
+      } else if (e.code === "KeyX" && state.screen === "steal" && stealReady) {
         triggerBuzzer();
         dispatch({ type: "STEAL_FAIL" });
       }
     };
-
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [state.screen, dispatch]);
+  }, [state.screen, stealReady, dispatch]);
 
-  const playingLabel = isSteal
-    ? `STEALING: ${state.stealTeam === "teamA" ? "TEAM A" : "TEAM B"}`
-    : `PLAYING: ${state.turn === "teamA" ? "TEAM A" : "TEAM B"}`;
+  const playingLabel =
+    isSteal
+      ? `STEALING: ${state.stealTeam === "teamA" ? "TEAM A" : "TEAM B"}`
+      : isRevealing
+      ? ""
+      : `PLAYING: ${state.turn === "teamA" ? "TEAM A" : "TEAM B"}`;
+
+  // ── What Enter-gate caption is currently needed? ──────────────────────────
+  const showStealGate    = isSteal && !stealReady;
+  const showEndRoundGate = isEndRound && !endRoundReady;
+  const showRevealedGate = isRevealing && allRevealed && !nextRoundReady;
+  const showAnyGate      = showStealGate || showEndRoundGate || showRevealedGate;
+
+  const handleEnter = () => {
+    if (showStealGate)    { setStealReady(true);    return; }
+    if (showEndRoundGate) { setEndRoundReady(true);  return; }
+    if (showRevealedGate) { setNextRoundReady(true); return; }
+  };
 
   return (
     <div className="fixed top-0 flex flex-col flex-1 gap-4 items-center justify-center font-barlow h-full w-full dotted">
@@ -66,14 +124,24 @@ export default function BoardScreen() {
         <Nameplate name="Team B" score={state.scores.teamB} />
       </div>
 
+      {/* Buzz toasts */}
       <div className="fixed inset-0 pointer-events-none z-[500000] flex items-center justify-center">
         <AnimatePresence>
           {toasts.map((toast) => <BuzzToast key={toast.id} />)}
         </AnimatePresence>
       </div>
 
-      {isSteal && <StealOverlay />}
-      {isEndRound && <EndRoundOverlay />}
+      {/* Enter-to-continue gate — sits above everything except toasts */}
+      {showAnyGate && <EnterToContinue onContinue={handleEnter} />}
+
+      {/* Modals — only shown after their gate is cleared */}
+      {isSteal && stealReady && <StealOverlay />}
+      {isEndRound && endRoundReady && (
+        <EndRoundOverlay onReveal={() => dispatch({ type: "START_REVEALING" })} />
+      )}
+      {isRevealing && allRevealed && nextRoundReady && (
+        <NextRoundOverlay />
+      )}
     </div>
   );
 }

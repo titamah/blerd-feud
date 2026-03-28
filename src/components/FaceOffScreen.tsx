@@ -5,162 +5,97 @@ import { AnimatePresence } from "motion/react";
 import { useGame, Team } from "@/context/GameContext";
 import SurveyBoard from "@/components/SurveyBoard";
 import Nameplate from "@/components/Namebox";
+import Lives from "@/components/Lives";
+import BuzzToast from "@/components/BuzzToast";
 import TeamBuzzToast from "@/components/TeamBuzzToast";
 
-interface BuzzToast {
+interface BuzzToastEntry {
   id: number;
-  team: Team;
+  team: Team | null; // null = wrong-answer X buzz
 }
 
 export default function FaceOffScreen() {
   const { state, dispatch } = useGame();
   const { faceOff } = state;
-  const [toasts, setToasts] = useState<BuzzToast[]>([]);
+  const [toasts, setToasts] = useState<BuzzToastEntry[]>([]);
 
-  const triggerTeamBuzz = (team: Team) => {
+  const triggerToast = (team: Team | null) => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, team }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 2000);
+    }, 1000);
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // A = Team A buzzes
       if (e.code === "KeyA") {
-        triggerTeamBuzz("teamA");
+        triggerToast("teamA");
         dispatch({ type: "FACE_OFF_BUZZ", payload: "teamA" });
       }
+      // B = Team B buzzes
       if (e.code === "KeyB") {
-        triggerTeamBuzz("teamB");
+        triggerToast("teamB");
         dispatch({ type: "FACE_OFF_BUZZ", payload: "teamB" });
+      }
+      // X = wrong answer buzz (no lives lost)
+      if (e.code === "KeyX" && faceOff.activeBuzzer !== null) {
+        triggerToast(null);
+        dispatch({ type: "FACE_OFF_ANSWER_WRONG" });
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [dispatch]);
+  }, [dispatch, faceOff.activeBuzzer]);
 
-  // Determine current state of face-off to show right controls
-  const firstBuzzed = faceOff.buzzedTeam;
-  const firstWasWrong = faceOff.firstAnswerCorrect === false;
-  const secondBuzzed = faceOff.secondBuzzedTeam;
-  const bothWrong = firstWasWrong && secondBuzzed !== null;
+  // Derive UI state
+  const { activeBuzzer, answers } = faceOff;
+  const teamsAnswered = answers?.map((a) => a.team);
+  const bothAnswered = answers?.length === 2;
+  const topAnswer = false;
+  const waitingForBuzz = (!activeBuzzer && !bothAnswered) || topAnswer;
+  const activeTeamLabel = activeBuzzer === "teamA" ? "TEAM A" : activeBuzzer === "teamB" ? "TEAM B" : null;
 
-  // Label for who is currently answering
-  const answeringTeam = firstWasWrong && secondBuzzed
-    ? secondBuzzed
-    : firstBuzzed;
+  // Which team hasn't answered yet (for "now it's your turn" prompt)
+  const remainingTeam = answers?.length === 1
+    ? (answers[0].team === "teamA" ? "teamB" : "teamA")
+    : null;
 
   return (
     <div className="fixed top-0 flex flex-col flex-1 gap-4 items-center justify-center font-barlow h-full w-full dotted">
 
       {/* Header */}
-      <div className="w-[85%] max-w-[1048px] flex flex-row items-center">
-        <div className="w-full font-barlow-condensed font-[700] text-4xl text-black p-2 px-4 text-center">
-          FACE-OFF — PRESS <span className="bg-black text-white px-2">A</span> OR <span className="bg-black text-white px-2">B</span> TO BUZZ IN
-        </div>
-      </div>
-
-      {/* Board (locked / display only) */}
-      <SurveyBoard locked />
-
-      {/* Controls */}
-      <div className="w-[85%] max-w-[1048px] flex flex-col items-center gap-4">
-
-        {/* No one has buzzed yet */}
-        {!firstBuzzed && (
-          <p className="font-space-mono text-xl text-black opacity-60">
-            Waiting for a team to buzz in...
+      <div className="w-[85%] max-w-[1048px] h-[56px] flex flex-row items-center justify-between">
+        {/* Placeholder lives (greyed out — not active yet) */}
+         {waitingForBuzz && answers?.length === 0 && (
+          <p className="font-barlow-condensed font-[700] text-3xl text-black animate-pulse w-full text-center">
+            WAITING FOR BUZZ IN...
           </p>
         )}
-
-        {/* First team buzzed, waiting for host to judge */}
-        {firstBuzzed && !firstWasWrong && faceOff.firstAnswerCorrect === null && (
-          <div className="flex flex-col items-center gap-3">
-            <p className="font-barlow-condensed font-[700] text-3xl text-black">
-              {`${firstBuzzed === "teamA" ? "TEAM A" : "TEAM B"} BUZZED IN`}
-            </p>
-            <p className="font-space-mono text-lg text-black opacity-70">
-              Read the answer. Is it on the board?
-            </p>
-            <div className="flex flex-row gap-4">
-              <button
-                onClick={() => dispatch({ type: "FACE_OFF_CORRECT" })}
-                className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-xl bg-black text-white px-6 py-2"
-              >
-                ✅ ON THE BOARD
-              </button>
-              <button
-                onClick={() => dispatch({ type: "FACE_OFF_WRONG" })}
-                className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-xl bg-[#FF00B3] text-white px-6 py-2"
-              >
-                ❌ NOT ON THE BOARD
-              </button>
-            </div>
-          </div>
+        {(waitingForBuzz && answers?.length === 1 && remainingTeam) && answers[0].answerIndex != 0  && (
+          <p className="font-barlow-condensed font-[700] text-3xl text-black animate-pulse w-full text-center">
+            {`${remainingTeam === "teamA" ? "TEAM A" : "TEAM B"}'S CHANCE TO STEAL!`}
+          </p>
         )}
-
-        {/* First was wrong, waiting for second buzz */}
-        {firstWasWrong && !secondBuzzed && (
-          <div className="flex flex-col items-center gap-2">
-            <p className="font-barlow-condensed font-[700] text-3xl text-black animate-pulse">
-              {`${firstBuzzed === "teamA" ? "TEAM B" : "TEAM A"} — BUZZ IN!`}
+        {activeBuzzer && (
+            <p className="font-barlow-condensed font-[700] text-3xl text-black justify-right animate-pulse w-full text-center">
+              {`${activeTeamLabel} IS ANSWERING...`}
             </p>
-            <p className="font-space-mono text-lg text-black opacity-70">
-              Press <strong>{firstBuzzed === "teamA" ? "B" : "A"}</strong> when they answer.
-            </p>
-          </div>
-        )}
-
-        {/* Second team buzzed, waiting for host to judge */}
-        {firstWasWrong && secondBuzzed && !bothWrong && (
-          <div className="flex flex-col items-center gap-3">
-            <p className="font-barlow-condensed font-[700] text-3xl text-black">
-              {`${secondBuzzed === "teamA" ? "TEAM A" : "TEAM B"} BUZZED IN`}
-            </p>
-            <p className="font-space-mono text-lg text-black opacity-70">
-              Read the answer. Is it on the board?
-            </p>
-            <div className="flex flex-row gap-4">
-              <button
-                onClick={() => dispatch({ type: "FACE_OFF_CORRECT" })}
-                className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-xl bg-black text-white px-6 py-2"
-              >
-                ✅ ON THE BOARD
-              </button>
-              <button
-                onClick={() => dispatch({ type: "FACE_OFF_WRONG" })}
-                className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-xl bg-[#FF00B3] text-white px-6 py-2"
-              >
-                ❌ NOT ON THE BOARD
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Both wrong — host assigns manually */}
-        {bothWrong && (
-          <div className="flex flex-col items-center gap-3">
-            <p className="font-barlow-condensed font-[700] text-3xl text-black">
-              BOTH WRONG — HOST ASSIGNS
-            </p>
-            <div className="flex flex-row gap-4">
-              <button
-                onClick={() => dispatch({ type: "FACE_OFF_ASSIGN", payload: "teamA" })}
-                className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-xl bg-black text-white px-6 py-2"
-              >
-                TEAM A PLAYS
-              </button>
-              <button
-                onClick={() => dispatch({ type: "FACE_OFF_ASSIGN", payload: "teamB" })}
-                className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-xl bg-black text-white px-6 py-2"
-              >
-                TEAM B PLAYS
-              </button>
-            </div>
-          </div>
         )}
       </div>
+
+    
+
+      {/* Board — always interactive during face-off */}
+      <SurveyBoard mode="face_off" />
+
+      {/* Round points (face-off answers accumulate) */}
+      {/* <div className="w-[85%] max-w-[1048px] flex flex-row items-center justify-center">
+        <div className="font-space-mono font-[700] text-4xl text-white bg-black p-2 px-4">
+          {state.roundPoints.toString().padStart(3, "0")}
+        </div>
+      </div> */}
 
       {/* Nameplates */}
       <div className="w-[85%] max-w-[1048px] flex flex-row justify-between">
@@ -168,11 +103,15 @@ export default function FaceOffScreen() {
         <Nameplate name="Team B" score={state.scores.teamB} />
       </div>
 
-      {/* Team buzz toasts */}
+      {/* Toasts */}
       <AnimatePresence>
-        {toasts.map((toast) => (
-          <TeamBuzzToast key={toast.id} team={toast.team} />
-        ))}
+        {toasts.map((toast) =>
+          toast.team ? (
+            <TeamBuzzToast key={toast.id} team={toast.team} />
+          ) : (
+            <BuzzToast key={toast.id} />
+          )
+        )}
       </AnimatePresence>
     </div>
   );

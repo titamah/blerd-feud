@@ -3,16 +3,29 @@
 import { useEffect } from "react";
 import { useGame } from "@/context/GameContext";
 
+type BoardMode = "face_off" | "board" | "steal" | "locked";
+
 type Props = {
-  locked?: boolean; // face-off mode: show board but disable all interaction
+  mode?: BoardMode;
 };
 
-export default function SurveyBoard({ locked = false }: Props) {
+export default function SurveyBoard({ mode }: Props) {
   const { state, currentQuestion, dispatch } = useGame();
 
-  const canInteract = !locked && (state.screen === "board" || state.screen === "steal");
+  // Infer mode from game state if not explicitly passed
+  const resolvedMode: BoardMode = mode ?? (() => {
+    if (state.screen === "face_off") return "face_off";
+    if (state.screen === "steal") return "steal";
+    if (state.screen === "board") return "board";
+    return "locked";
+  })();
 
-  // Keyboard 1–8 reveals that answer slot
+  const isFaceOff = resolvedMode === "face_off";
+  const isBoard = resolvedMode === "board";
+  const isSteal = resolvedMode === "steal";
+  const canInteract = isFaceOff || isBoard || isSteal;
+
+  // Keyboard 1–8: reveal answer
   useEffect(() => {
     if (!canInteract) return;
 
@@ -25,7 +38,14 @@ export default function SurveyBoard({ locked = false }: Props) {
       if (!answer) return;
       if (state.revealed.includes(index)) return;
 
-      if (state.screen === "steal") {
+      if (isFaceOff) {
+        // Only allow reveal if a team has the active buzzer
+        if (!state.faceOff.activeBuzzer) return;
+        dispatch({
+          type: "FACE_OFF_ANSWER_CORRECT",
+          payload: { index, points: answer.points },
+        });
+      } else if (isSteal) {
         dispatch({ type: "STEAL_SUCCESS", payload: { index, points: answer.points } });
       } else {
         dispatch({ type: "REVEAL_ANSWER", payload: { index, points: answer.points } });
@@ -34,7 +54,7 @@ export default function SurveyBoard({ locked = false }: Props) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canInteract, currentQuestion, state.revealed, state.screen, dispatch]);
+  }, [canInteract, isFaceOff, isSteal, currentQuestion, state.revealed, state.faceOff?.activeBuzzer, dispatch]);
 
   if (!currentQuestion) return null;
 
@@ -51,33 +71,48 @@ export default function SurveyBoard({ locked = false }: Props) {
           rank={i + 1}
           answerIndex={i}
           isRevealed={state.revealed.includes(i)}
-          locked={locked}
+          mode={resolvedMode}
         />
       ))}
     </div>
   );
 }
 
+// ─── Individual Answer Tile ───────────────────────────────────────────────────
+
 type AnswerProps = {
   answer: { value: string; points: number } | null;
   rank: number;
   answerIndex: number;
   isRevealed: boolean;
-  locked: boolean;
+  mode: BoardMode;
 };
 
-function SurveyAnswer({ answer, rank, answerIndex, isRevealed, locked }: AnswerProps) {
+function SurveyAnswer({ answer, rank, answerIndex, isRevealed, mode }: AnswerProps) {
   const { state, dispatch } = useGame();
 
-  const canClick =
-    !locked &&
-    !isRevealed &&
-    answer !== null &&
-    (state.screen === "board" || state.screen === "steal");
+  const isFaceOff = mode === "face_off";
+  const isSteal = mode === "steal";
+  const isBoard = mode === "board";
+
+  // Face-off: clickable only when a team has the buzzer and answer isn't revealed
+  const faceOffClickable = isFaceOff && !isRevealed && !!state.faceOff?.activeBuzzer && answer !== null;
+  // Board: always clickable if not revealed
+  const boardClickable = isBoard && !isRevealed && answer !== null;
+  // Steal: always clickable if not revealed
+  const stealClickable = isSteal && !isRevealed && answer !== null;
+
+  const canClick = faceOffClickable || boardClickable || stealClickable;
 
   const handleClick = () => {
     if (!canClick || !answer) return;
-    if (state.screen === "steal") {
+
+    if (isFaceOff) {
+      dispatch({
+        type: "FACE_OFF_ANSWER_CORRECT",
+        payload: { index: answerIndex, points: answer.points },
+      });
+    } else if (isSteal) {
       dispatch({ type: "STEAL_SUCCESS", payload: { index: answerIndex, points: answer.points } });
     } else {
       dispatch({ type: "REVEAL_ANSWER", payload: { index: answerIndex, points: answer.points } });
@@ -95,7 +130,7 @@ function SurveyAnswer({ answer, rank, answerIndex, isRevealed, locked }: AnswerP
   if (isRevealed) {
     return (
       <div className="flex flex-row w-[49%] h-[21.5%] border-[5px] border-[#ff86d6]">
-        <div className="flex w-[75%] h-full bg-gradient-to-b from-[#fe86d680] to-[#fe86d6BF] items-center justify-center text-center font-barlow-condensed font-[400] text-white text-6xl">
+        <div className="flex w-[75%] h-full bg-gradient-to-b from-[#fe86d680] to-[#fe86d6BF] items-center justify-center text-center font-barlow-condensed font-[400] text-white text-4xl">
           {answer.value}
         </div>
         <div className="flex w-[25%] h-full border-l-[5px] border-[#ff86d6] bg-[#fe86d680] items-center justify-center text-center font-barlow-condensed font-[600] text-white text-6xl">
@@ -105,14 +140,14 @@ function SurveyAnswer({ answer, rank, answerIndex, isRevealed, locked }: AnswerP
     );
   }
 
-  // Hidden
+  // Hidden — dim it during face-off when no one has the buzzer
+  const dimmed = isFaceOff && !state.faceOff?.activeBuzzer;
+
   return (
     <div
       onClick={handleClick}
       className={`w-[49%] h-[21.5%] border-[5px] border-[#ff86d6] bg-gradient-to-b from-[#fe86d7] to-[#ff00b3] leading-[100px] text-center font-barlow font-[800] text-white text-7xl transition-opacity ${
-        canClick
-          ? "hover:cursor-pointer hover:opacity-75"
-          : "opacity-50 cursor-default"
+        canClick ? "hover:cursor-pointer hover:opacity-75" : "opacity-75"
       }`}
     >
       {rank}

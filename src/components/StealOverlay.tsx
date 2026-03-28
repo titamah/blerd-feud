@@ -1,11 +1,17 @@
 "use client";
 
-import { useGame } from "@/context/GameContext";
+import { useState } from "react";
+import { useGame, opposite } from "@/context/GameContext";
 
 export default function StealOverlay() {
   const { state, dispatch } = useGame();
-  const stealTeam = state.stealTeam ?? (state.turn === "teamA" ? "teamB" : "teamA");
+  const [dismissed, setDismissed] = useState(false);
+
+  const stealTeam = state.stealTeam ?? opposite(state.turn);
   const stealLabel = stealTeam === "teamA" ? "TEAM A" : "TEAM B";
+
+  // Once dismissed, board handles the steal click/keypress directly
+  if (dismissed) return null;
 
   return (
     <div className="fixed inset-0 z-[9000] flex items-center justify-center bg-black/70">
@@ -22,24 +28,22 @@ export default function StealOverlay() {
           One answer. Make it count.
           <br />
           <span className="opacity-70 text-sm">
-            Close this and click an answer on the board, or press its number key.
+            Press a number key or click an answer on the board.
           </span>
         </p>
 
-        <div className="flex flex-row gap-4 w-full">
+        <div className="flex flex-col gap-3 w-full">
           <button
-            onClick={() => dispatch({ type: "STEAL_FAIL" })}
-            className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-lg bg-black text-white px-6 py-3 flex-1"
+            onClick={() => setDismissed(true)}
+            className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-lg bg-white text-black border-[4px] border-black px-6 py-3 w-full text-center"
           >
-            WRONG ANSWER →<br />
-            <span className="text-sm font-[400] opacity-70">pass points to other team</span>
+            PICK AN ANSWER → (close &amp; use the board)
           </button>
           <button
-            onClick={() => {/* just close overlay — clicking board handles STEAL_SUCCESS */}}
-            className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-lg bg-white text-black border-[4px] border-black px-6 py-3 flex-1"
+            onClick={() => dispatch({ type: "STEAL_FAIL" })}
+            className="cursor-pointer hover:opacity-85 transition-all font-space-mono font-[700] text-lg bg-black text-white px-6 py-3 w-full text-center"
           >
-            PICK AN ANSWER →<br />
-            <span className="text-sm font-[400] opacity-70">close & click the board</span>
+            WRONG ANSWER → pass points to playing team
           </button>
         </div>
       </div>

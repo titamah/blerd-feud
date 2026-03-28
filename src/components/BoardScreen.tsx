@@ -10,9 +10,7 @@ import StealOverlay from "@/components/StealOverlay";
 import EndRoundOverlay from "@/components/EndRoundOverlay";
 import { useGame } from "@/context/GameContext";
 
-interface Toast {
-  id: number;
-}
+interface Toast { id: number }
 
 export default function BoardScreen() {
   const { state, dispatch } = useGame();
@@ -24,12 +22,9 @@ export default function BoardScreen() {
   const triggerBuzzer = () => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 2000);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 1000);
   };
 
-  // X key = strike (only during active board play)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "KeyX" && state.screen === "board") {
@@ -47,8 +42,7 @@ export default function BoardScreen() {
 
   return (
     <div className="fixed top-0 flex flex-col flex-1 gap-4 items-center justify-center font-barlow h-full w-full dotted">
-      {/* Top bar */}
-      <div className="w-[85%] max-w-[1048px] flex flex-row items-center">
+      <div className="w-[85%] max-w-[1048px] flex flex-row items-center h-[56px]">
         <div className="w-[33%] font-barlow-condensed font-[700] text-4xl text-black p-2 px-4">
           {playingLabel}
         </div>
@@ -60,28 +54,20 @@ export default function BoardScreen() {
         <Lives count={Math.max(0, 3 - state.strikes)} active={true} />
       </div>
 
-      {/* Board */}
       <SurveyBoard />
 
-      {/* Nameplates */}
       <div className="w-[85%] max-w-[1048px] flex flex-row justify-between">
         <Nameplate name="Team A" score={state.scores.teamA} />
         <Nameplate name="Team B" score={state.scores.teamB} />
       </div>
 
-      {/* Buzz toasts */}
       <div className="fixed inset-0 pointer-events-none z-[500000] flex items-center justify-center">
         <AnimatePresence>
-          {toasts.map((toast) => (
-            <BuzzToast key={toast.id} />
-          ))}
+          {toasts.map((toast) => <BuzzToast key={toast.id} />)}
         </AnimatePresence>
       </div>
 
-      {/* Steal overlay */}
       {isSteal && <StealOverlay />}
-
-      {/* End of round overlay */}
       {isEndRound && <EndRoundOverlay />}
     </div>
   );

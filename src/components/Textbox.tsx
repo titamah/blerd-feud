@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 
 type TextboxProps = {
@@ -12,7 +14,7 @@ export default function Textbox({ title, text }: TextboxProps) {
         {title.toUpperCase()}
       </div>
 
-      <div className=" w-[67%] text-center z-1000 absolute top-[42%] left-[16.5%] text-xl font-space-mono">{text}</div>
+      <div className=" w-[67%] text-center z-1000 absolute top-[38%] left-[16.5%] text-4xl font-[700] font-space-mono">{text}</div>
         <Image
           src="/Textbox.png"
           alt="Blerd Feud"

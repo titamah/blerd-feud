@@ -14,7 +14,6 @@ export default function Home() {
 
   if (state.screen === "question") return <QuestionScreen />;
 
-  // play_or_pass renders the board underneath with the modal on top
   if (state.screen === "face_off" || state.screen === "play_or_pass") {
     return (
       <>
@@ -28,9 +27,7 @@ export default function Home() {
     state.screen === "board" ||
     state.screen === "steal" ||
     state.screen === "end_round"
-  ) {
-    return <BoardScreen />;
-  }
+  ) return <BoardScreen />;
 
   if (state.screen === "end") return <EndScreen />;
 
@@ -42,9 +39,7 @@ export default function Home() {
         animate={{ scale: [1, 1.25, 1], opacity: 1 }}
         exit={{ scale: 0, opacity: 0, transition: { duration: 0.2 } }}
         transition={{
-          type: "spring",
-          stiffness: 260,
-          damping: 20,
+          type: "spring", stiffness: 260, damping: 20,
           scale: { repeat: Infinity, duration: 2, ease: "easeInOut" },
         }}
         className="w-[95%] h-[65%] relative z-50 flex flex-col justify-center items-center"

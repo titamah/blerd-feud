@@ -22,10 +22,19 @@ export type Screen =
 
 export type Team = "teamA" | "teamB";
 
+export type FaceOffAnswer = {
+  team: Team;
+  answerIndex: number | null; // null = wrong (not on board)
+  points: number;             // 0 if wrong
+};
+
 export type FaceOffState = {
-  buzzedTeam: Team | null;
-  firstAnswerCorrect: boolean | null;
-  secondBuzzedTeam: Team | null;
+  // Which team has the buzzer right now (waiting to answer)
+  activeBuzzer: Team | null;
+  // Answers submitted so far (max 2, one per team)
+  answers: FaceOffAnswer[];
+  // Which team won the face-off (gets Play or Pass)
+  winner: Team | null;
 };
 
 export type GameState = {
@@ -45,17 +54,21 @@ export type GameState = {
 export type GameAction =
   | { type: "START_GAME" }
   | { type: "SHOW_BOARD" }
+  // Face-off
   | { type: "FACE_OFF_BUZZ"; payload: Team }
-  | { type: "FACE_OFF_CORRECT" }
-  | { type: "FACE_OFF_WRONG" }
-  | { type: "FACE_OFF_ASSIGN"; payload: Team }
+  | { type: "FACE_OFF_ANSWER_CORRECT"; payload: { index: number; points: number } }
+  | { type: "FACE_OFF_ANSWER_WRONG" }
+  // Play or Pass
   | { type: "PLAY" }
   | { type: "PASS" }
+  // Board
   | { type: "REVEAL_ANSWER"; payload: { index: number; points: number } }
   | { type: "REVEAL_ALL" }
   | { type: "ADD_STRIKE" }
+  // Steal
   | { type: "STEAL_SUCCESS"; payload: { index: number; points: number } }
   | { type: "STEAL_FAIL" }
+  // Navigation
   | { type: "NEXT_QUESTION" }
   | { type: "RESET_GAME" };
 
@@ -67,16 +80,16 @@ export type GameContextType = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function opposite(team: Team): Team {
+export function opposite(team: Team): Team {
   return team === "teamA" ? "teamB" : "teamA";
 }
 
 // ─── Initial State ────────────────────────────────────────────────────────────
 
 const initialFaceOff: FaceOffState = {
-  buzzedTeam: null,
-  firstAnswerCorrect: null,
-  secondBuzzedTeam: null,
+  activeBuzzer: null,
+  answers: [],
+  winner: null,
 };
 
 const initialState: GameState = {
@@ -117,51 +130,108 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case "FACE_OFF_BUZZ": {
       const { faceOff } = state;
-      if (!faceOff.buzzedTeam) {
-        return { ...state, faceOff: { ...faceOff, buzzedTeam: action.payload } };
-      }
-      // Only allow second buzz if first answer was ruled wrong
-      if (faceOff.firstAnswerCorrect === false && !faceOff.secondBuzzedTeam
-          && action.payload !== faceOff.buzzedTeam) {
-        return { ...state, faceOff: { ...faceOff, secondBuzzedTeam: action.payload } };
-      }
-      return state;
-    }
+      const team = action.payload;
 
-    case "FACE_OFF_CORRECT": {
-      const winner = state.faceOff.buzzedTeam ?? "teamA";
+      // Ignore if this team already answered, or if there's already an active buzzer
+      if (faceOff.activeBuzzer !== null) return state;
+      if (faceOff.answers.some((a) => a.team === team)) return state;
+
       return {
         ...state,
-        screen: "play_or_pass",
-        turn: winner,
-        faceOff: { ...state.faceOff, firstAnswerCorrect: true },
+        faceOff: { ...faceOff, activeBuzzer: team },
       };
     }
 
-    case "FACE_OFF_WRONG": {
+    case "FACE_OFF_ANSWER_CORRECT": {
+      // Active buzzer got an answer on the board — reveal it
       const { faceOff } = state;
-      // First team got it wrong — wait for second buzz
-      if (!faceOff.secondBuzzedTeam) {
-        return { ...state, faceOff: { ...faceOff, firstAnswerCorrect: false } };
+      const team = faceOff.activeBuzzer;
+      if (!team) return state;
+
+      const newAnswer: FaceOffAnswer = {
+        team,
+        answerIndex: action.payload.index,
+        points: action.payload.points,
+      };
+      const newAnswers = [...faceOff.answers, newAnswer];
+      const newRevealed = [...state.revealed, action.payload.index];
+      const newRoundPoints = state.roundPoints + action.payload.points;
+
+      if (newAnswer.answerIndex === 0) {
+        const winner = newAnswer.team;
+        return {
+          ...state,
+          revealed: newRevealed,
+          roundPoints: newRoundPoints,
+          faceOff: { ...faceOff, activeBuzzer: null, answers: newAnswers, winner },
+          screen: "play_or_pass",
+          turn: winner,
+        };
       }
-      // Both answered — second buzzer wins
+
+      // Both teams have now answered — determine winner
+      if (newAnswers.length === 2) {
+        const [first, second] = newAnswers;
+        // Higher points wins; tie goes to first buzzer
+        const winner = second.points > first.points ? second.team : first.team;
+        return {
+          ...state,
+          revealed: newRevealed,
+          roundPoints: newRoundPoints,
+          faceOff: { ...faceOff, activeBuzzer: null, answers: newAnswers, winner },
+          screen: "play_or_pass",
+          turn: winner,
+        };
+      }
+
+      // Only one team answered correctly — other team gets to buzz
       return {
         ...state,
-        screen: "play_or_pass",
-        turn: faceOff.secondBuzzedTeam,
-        faceOff: { ...faceOff, firstAnswerCorrect: false },
+        revealed: newRevealed,
+        roundPoints: newRoundPoints,
+        faceOff: { ...faceOff, activeBuzzer: null, answers: newAnswers, winner: null },
       };
     }
 
-    case "FACE_OFF_ASSIGN":
-      return { ...state, screen: "play_or_pass", turn: action.payload };
+    case "FACE_OFF_ANSWER_WRONG": {
+      // Active buzzer's answer was NOT on the board
+      const { faceOff } = state;
+      const team = faceOff.activeBuzzer;
+      if (!team) return state;
+
+      const newAnswer: FaceOffAnswer = { team, answerIndex: null, points: 0 };
+      const newAnswers = [...faceOff.answers, newAnswer];
+
+      // Both teams answered and both were wrong → first buzzer wins
+      if (newAnswers.length === 2) {
+        const winner = newAnswers[0].team;
+        return {
+          ...state,
+          faceOff: { ...faceOff, activeBuzzer: null, answers: newAnswers, winner },
+          screen: "play_or_pass",
+          turn: winner,
+        };
+      }
+
+      // One team answered wrong — other team gets to buzz
+      return {
+        ...state,
+        faceOff: { ...faceOff, activeBuzzer: null, answers: newAnswers, winner: null },
+      };
+    }
 
     // ── Play or Pass ──────────────────────────────────────────────────────────
 
     case "PLAY":
-      return { ...state, screen: "board", stealTeam: opposite(state.turn) };
+      // Winner plays — opponent gets steal rights
+      return {
+        ...state,
+        screen: "board",
+        stealTeam: opposite(state.turn),
+      };
 
     case "PASS":
+      // Winner passes — opponent plays, winner retains steal rights
       return {
         ...state,
         screen: "board",
